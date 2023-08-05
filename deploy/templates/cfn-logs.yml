@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ServiceName:
+    Type: String
+    Default: cfn-sample # 任意の名称を設定
+  EnvSuffix:
+    Type: String
+    Default: -dev
+    AllowedValues:
+      - -dev # 開発環境
+      - -qa  # 検証環境
+      - ''   # 本番環境
+
+Resources:
+  ECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ecs/${ServiceName}${EnvSuffix}
+      RetentionInDays: 14
+      Tags:
+        - Key: "CfnStackName"
+          Value: !Ref AWS::StackName
+  
+  FireLensLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ecs/${ServiceName}-firelens${EnvSuffix}
+      RetentionInDays: 14
+      Tags:
+        - Key: "CfnStackName"
+          Value: !Ref AWS::StackName
+
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join [ '', [ !Ref ServiceName, -logs, !Ref EnvSuffix ] ]
+      VersioningConfiguration:
+        Status: Suspended
+      LifecycleConfiguration:
+        Rules:
+          - Id: !Join [ '', [ !Ref ServiceName, -tweet-logs-lifecycle-policy, !Ref EnvSuffix ] ]
+            Prefix: fluent-bit-logs/tweet-log/
+            Status: Enabled
+            ExpirationInDays: 30
+      Tags:
+        - Key: "CfnStackName"
+          Value: !Ref AWS::StackName

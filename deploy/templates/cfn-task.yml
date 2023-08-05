@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ServiceName:
+    Type: String
+    Default: cfn-sample
+  EnvName:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - qa
+      - prod
+  EnvSuffix:
+    Type: String
+    Default: -dev
+    AllowedValues:
+      - -dev
+      - -qa
+      - ''
+
+Resources:
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Name: !Join [ '', [ !Ref ServiceName, !Ref EnvSuffix ] ]
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.ap-northeast-1.amazonaws.com/${ServiceName}${EnvSuffix}:latest
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /aws/ecs/${ServiceName}${EnvSuffix}
+              awslogs-region: ap-northeast-1
+              awslogs-stream-prefix: ecs
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+          Command:
+            - /app/entrypoint.sh
+          Environment:
+            - Name: DB_NAME
+              Value: myapp_development
+            - Name: DB_USER
+              Value: postgres
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: TZ
+              Value: Asia/Tokyo
+            - Name: IS_DEBUG
+              Value: False
+          Secrets:
+            - Name: DB_HOST
+              ValueFrom: !Sub /${ServiceName}/${EnvName}/DB_HOST
+            - Name: DB_PASSWORD
+              ValueFrom: !ImportValue cfn-rds:SecretsManagerDBPasswordArn
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !ImportValue cfn-iam:ECSTaskExecutionRole
+      Family: !Join [ '', [ !Ref ServiceName, !Ref EnvSuffix ] ]
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !ImportValue cfn-iam:ECSTaskExecutionRole
+      Tags:
+        - Key: "CfnStackName"
+          Value: !Ref AWS::StackName
+
+  ECSTaskDefinitionArn:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${ServiceName}/${EnvName}/ECSTaskDefinitionArn
+      Type: String
+      Value: !Ref ECSTaskDefinition

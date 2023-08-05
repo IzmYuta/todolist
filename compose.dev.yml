@@ -1,0 +1,47 @@
+version: '3.9'
+
+services:
+  api:
+    build: ./app
+    container_name: todo_api
+    command:
+      [
+        'bash',
+        '-c',
+        'python manage.py migrate && python manage.py runserver 0.0.0.0:8000',
+      ]
+    volumes:
+      - ./app:/code
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - 8000:8000
+    tty: true
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+  db:
+    container_name: todo_db
+    image: postgres:14
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ports:
+      - 5432:5432
+
+

@@ -1,0 +1,27 @@
+FROM python:3.10-slim-bullseye
+ENV PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONUNBUFFERED=1 \
+  PIP_DISABLE_PIP_VERSION_CHECK=on \
+  PIP_NO_CACHE_DIR=on
+
+RUN apt-get update && apt-get install -y \
+  postgresql \
+  libpq-dev \
+  gcc \
+  git \
+  nginx \
+  openrc \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+RUN pip install --upgrade pip
+
+COPY app/requirements/ /app/
+RUN pip install -r app/prod.txt
+
+COPY deploy/development/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/development/entrypoint.sh app/entrypoint.sh
+RUN openrc && touch /run/openrc/softlevel
+EXPOSE 80
+
+COPY app/. /app/
+RUN chmod +x /app/entrypoint.sh 

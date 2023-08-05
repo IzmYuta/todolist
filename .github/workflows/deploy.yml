@@ -1,0 +1,101 @@
+name: test and deploy
+on: 
+  push:
+    branches:
+      - 'main'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v3
+      - name: Set up Python environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - uses: actions/cache@v3
+        id: cache-dep
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements/**') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r app/requirements/dev.txt
+      - name: lint
+        working-directory: ./app
+        run: |
+          flake8
+          isort --check-only --diff .
+          black . --check --diff
+          python manage.py makemigrations --check --dry-run
+      - name: Django app test
+        id: django_tests
+        working-directory: ./app
+        run: |
+          python manage.py test --parallel --settings=config.tests
+  
+  deploy:
+    name: Deploy Fargate
+    needs: test
+    env:
+      SERVICE_NAME: cfn-sample-dev
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Cache Docker layers
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+
+    - name: Configure AWS credentials from Test account
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-oidc-${{ env.SERVICE_NAME }}
+        aws-region: ap-northeast-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - uses: docker/build-push-action@v4
+      id: build-image
+      with:
+        push: true
+        file: deploy/development/Dockerfile.prod
+        tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.SERVICE_NAME }}:latest
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+    - name: Move cache
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+    - name: Download task definition
+      run: |
+        aws ecs describe-task-definition --task-definition $SERVICE_NAME --query "taskDefinition.{containerDefinitions: containerDefinitions, family: family, taskRoleArn: taskRoleArn, executionRoleArn: executionRoleArn, networkMode: networkMode, volumes: volumes, placementConstraints: placementConstraints, requiresCompatibilities: requiresCompatibilities, cpu: cpu, memory: memory}" > task-definition.json
+    
+    - name: Deploy to Amazon ECS
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      with:
+        task-definition: task-definition.json
+        service: ${{ env.SERVICE_NAME }}
+        cluster: ${{ env.SERVICE_NAME }}
+        codedeploy-appspec: deploy/development/appspec.yml
+        codedeploy-application: AppECS-${{ env.SERVICE_NAME }}
+        codedeploy-deployment-group: DgpECS-${{ env.SERVICE_NAME }}

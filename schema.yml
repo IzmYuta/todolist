@@ -1,0 +1,172 @@
+openapi: 3.0.3
+
+info:
+  title: TODO API
+  description: TODOアプリのAPI
+  version: 1.0.0
+
+servers:
+  - url: https://izmyuta/api/v1
+    description: 本番環境
+
+paths:
+  /todo/:
+    get:
+      tags:
+        - todo
+      summary: TODO一覧取得
+      description: TODO一覧取得
+      responses:
+        200:
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Todo"
+        503:
+          $ref: "#/components/responses/ServerError"
+    post:
+      tags:
+        - todo
+      summary: TODOを作成
+      description: TODOを作成
+      requestBody:
+        description: TODOを作成
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Todo"
+            example:
+              title: レポート課題
+              status: new
+              deadline: "2024-01-01"
+      responses:
+        204:
+          description: TODO作成成功
+        503:
+          $ref: "#/components/responses/ServerError"
+  /todo/{id}/:
+    put:
+      tags:
+        - todo
+      summary: TODOを更新
+      description: TODOを更新
+      parameters:
+        - name: id
+          in: path
+          description: Todoのid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: TODOを更新
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Todo"
+            example:
+              title: レポート課題(数学)
+              status: wip
+      responses:
+        204:
+          description: TODO更新成功
+        404:
+          $ref: "#/components/responses/NotFound"
+        503:
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags:
+        - todo
+      summary: TODOを削除
+      description: TODOを削除
+      parameters:
+        - name: id
+          in: path
+          description: Todoのid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: TODO削除成功
+        404:
+          $ref: "#/components/responses/NotFound"
+        503:
+          $ref: "#/components/responses/ServerError"
+
+components:
+  schemas:
+    Todo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        uid:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - new
+            - wip
+            - done
+        deadline:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    # 没案
+    get_todo_response:
+      type: object
+      properties:
+        new:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+          example:
+            - id: 1
+              title: レポート課題
+              status: new
+              created_at: 2021-01-01T00:00:00+09:00
+              updated_at: 2021-01-01T00:00:00+09:00
+        wip:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+          example:
+            - id: 2
+              title: レポート課題(数学)
+              status: wip
+              created_at: 2021-01-01T00:00:00+09:00
+              updated_at: 2021-01-01T00:00:00+09:00
+        done:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+          example:
+            - id: 3
+              title: レポート課題(英語)
+              status: done
+              created_at: 2021-01-01T00:00:00+09:00
+              updated_at: 2021-01-01T00:00:00+09:00
+
+  responses:
+    NotFound:
+      description: 404 Error
+    ServerError:
+      description: 503 Error
+
+tags:
+  - name: todo
+    description: TODO用
